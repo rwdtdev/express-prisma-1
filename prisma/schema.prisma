@@ -1,0 +1,529 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch"]
+}
+
+// generator docs {
+//   provider = "node node_modules/prisma-docs-generator"
+//   output   = "../docs/models"
+// }
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  /// Идентификатор пользователя в формате cUID
+  id                      String     @id @default(cuid())
+  /// ФИО
+  name                    String
+  /// Логин для входа в систему
+  username                String     @unique
+  /// Адрес электронной почты
+  email                   String     @unique
+  /// Номер телефона
+  phone                   String
+  /// Хэш пароля
+  password                String
+  /// Список последних 5ти захешированных паролей пользователя, разделенных ","
+  passwordHashes          String[]
+  /// Роль
+  role                    UserRole   @default(USER)
+  /// Статус
+  status                  UserStatus @default(ACTIVE)
+  /// Дата и время создания записи
+  createdAt               DateTime   @default(now())
+  /// Дата и время модификации записи
+  updatedAt               DateTime   @updatedAt
+  /// Дата и время окончания действия аккаунта
+  expiresAt               DateTime
+  /// Табельный номер
+  tabelNumber             String     @unique
+  /// Внешний идентификатор в системе IVA R
+  ivaProfileId            String?    @unique
+  /// Токен для обновления accessToken-а в сессии пользователя
+  refreshToken            String?
+  /// Номер заявки в системе АС ОЗ
+  ASOZSystemRequestNumber String?
+  /// Дата и время последней смены пароля
+  lastUpdatePasswordDate  DateTime   @default(now())
+  /// Признак временного пароля
+  isTemporaryPassword     Boolean    @default(true)
+  /// Ссылка на отдел, в котором состоит пользователь
+  divisionId              String?
+
+  participants Participant[]
+  inventories  Inventory[]
+  locations    InventoryLocation[]
+
+  @@map("users")
+}
+
+model Event {
+  /// Идентификатор события в формате UUID
+  id                     String         @id @default(uuid())
+  /// Идентификатор распоряжения
+  commandId              String
+  /// Номер распоряжения
+  commandNumber          String
+  /// Идентификатор приказа формы № ИНВ-22
+  orderId                String
+  /// Номер приказа формы № ИНВ-22
+  orderNumber            String
+  /// Дата начала события
+  startAt                DateTime
+  /// Дата окончания события
+  endAt                  DateTime
+  /// Балансовая единица
+  balanceUnit            String
+  /// Код региона, в котором находится балансовая единица
+  balanceUnitRegionCode  String
+  /// Дата и время создания записи
+  createdAt              DateTime       @default(now())
+  /// Дата и время модификации записи
+  updatedAt              DateTime       @updatedAt
+  /// Глобальный статус события инвентаризации
+  status                 EventStatus    @default(ACTIVE)
+  /// Ссылка для подключения к открытой комнате видеоинструктажа
+  briefingRoomInviteLink String?
+  /// Статус инструктужа, которые выставляется на основе
+  briefingStatus         BriefingStatus @default(NOT_STARTED)
+  /// Дата распоряжения
+  commandDate            DateTime
+  /// Дата составления приказа формы № ИНВ-22
+  orderDate              DateTime
+  /// Идентификатор конференции в IVA-R
+  briefingSessionId      String?
+
+  /// Список участников события
+  participants Participant[]
+  /// Список описей
+  inventories  Inventory[]
+
+  @@map("events")
+}
+
+model Participant {
+  id          String          @id @default(uuid())
+  /// Идентификатор события
+  eventId     String
+  /// Объект с данными о событии, с которым связана опись
+  event       Event           @relation(fields: [eventId], references: [id])
+  /// Идентификатор описи
+  inventoryId String?
+  /// Объект с данными об описи
+  inventory   Inventory?      @relation(fields: [inventoryId], references: [id])
+  /// Идентификатор пользователя в виде табельного номера
+  tabelNumber String
+  /// Имя участника имя пользователя
+  name        String?
+  /// Объект с данными о пользователе
+  user        User?           @relation(fields: [userId], references: [id])
+  /// Идентификатор пользователя
+  userId      String?
+  /// Роль участника
+  role        ParticipantRole @default(PARTICIPANT)
+
+  @@unique([eventId, inventoryId, tabelNumber])
+  @@map("participants")
+}
+
+model Inventory {
+  /// Внешний Идентификаторр описи из SOI
+  id                  String              @id
+  /// Идентификатор события к которому привязана опись
+  eventId             String
+  /// Объект с данными о событии, с которым связана опись
+  event               Event               @relation(fields: [eventId], references: [id])
+  /// Номер описи
+  number              String
+  /// Код описи
+  code                String
+  /// Краткое наименование описи
+  shortName           String
+  /// Полное наименование описи
+  name                String
+  /// Дата описи
+  date                DateTime?
+  /// Идентификатор конференции в IVA-R
+  auditSessionId      String?
+  /// Ссылка для подключения к открытой комнате видеоинвентаризации
+  auditRoomInviteLink String?
+  /// Дата и время создания записи
+  createdAt           DateTime            @default(now())
+  /// Дата и время модификации записи
+  updatedAt           DateTime            @updatedAt
+  /// Список участников
+  participants        Participant[]
+  /// Cтатус описи
+  status              InventoryStatus     @default(AVAILABLE)
+  /// Идентификатор комплексной описи, если текущая опись является индивидуальной, в ином случае всегда = null
+  parentId            String?
+  /// Список объектов описи
+  objects             InventoryObject[]
+  /// Список данных о геолокации в месте проведения описи
+  locations           InventoryLocation[]
+  /// Список ресурсов инвентаризационной описи
+  resources           InventoryResource[]
+  /// Признак того, что инвентаризация по описи окончена, все ресурсы были обработаны, сохранены и т.д.
+  isProcessed         Boolean             @default(false)
+  /// Указанный вручную адрес места проведения инвентаризации
+  address             String?
+  /// Выбранный председателем участник конференции, который выполняет видеофиксацию с моб. устройства
+  videographerId      String?
+  /// Объект с данными о проводящем видеофиксацию
+  videographer        User?               @relation(fields: [videographerId], references: [id])
+  /// Идентификатор пользователя, который указывает время, когда было найдено ТМЦ на видео, указывает состояние ТМЦ
+  inspectorId         String?
+
+  @@map("inventories")
+}
+
+model InventoryLocation {
+  /// Идентификатор координаты
+  id          String             @id @default(uuid())
+  /// Широта
+  latitude    Float
+  /// Долгота
+  longitude   Float
+  /// Временная метка
+  dateTime    DateTime           @db.Timestamptz()
+  /// Точность
+  accuracy    Float
+  /// Идентификатор описи, 
+  inventoryId String
+  /// Объект с данными об описи
+  inventory   Inventory          @relation(fields: [inventoryId], references: [id])
+  /// Идентификатор ресурса к которому относятся метаданные
+  resourceId  String?
+  /// Объект с данными о ресурсе
+  resource    InventoryResource? @relation(fields: [resourceId], references: [id])
+  /// Дата и время создания записи
+  createdAt   DateTime           @default(now())
+  /// Идентификатор пользователя, от которого пришли метаданные
+  userId      String?
+  /// Объект с данными о пользователе
+  user        User?              @relation(fields: [userId], references: [id])
+
+  @@map("inventory_locations")
+}
+
+model InventoryObject {
+  /// Идентификатор ТМЦ
+  id                 String    @id @default(uuid())
+  /// Идентификатор описи
+  inventoryId        String
+  /// Объект с данными об описи
+  inventory          Inventory @relation(fields: [inventoryId], references: [id])
+  /// Номер описи
+  inventoryNumber    String?
+  /// Адрес места локации
+  location           String?
+  /// Серийный номер
+  serialNumber       String?
+  /// Сетевой номер
+  networkNumber      String?
+  /// Номер паспорта
+  passportNumber     String?
+  /// Количество
+  quantity           Int?
+  /// Состояние
+  state              String?
+  /// Название
+  name               String?
+  /// Код единицы измерения
+  unitCode           String?
+  /// Название единицы измерения
+  unitName           String?
+  /// Номер партии
+  batchNumber        String?
+  /// Местоположения
+  placement          String?
+  /// Номенклатурный номер
+  nomenclatureNumber String?
+  /// Дата и время создания записи
+  createdAt          DateTime  @default(now())
+  /// Дата и время модификации записи
+  updatedAt          DateTime  @updatedAt
+  /// Время на видео, когда появляется тмц
+  onVideoAt          DateTime? @db.Timestamptz()
+  /// Состояние исправно / неисправно 
+  isConditionOk      Boolean?
+  /// Комментарии о состоянии 
+  comments           String?
+
+  @@map("inventory_objects")
+}
+
+model InventoryResource {
+  /// Уникальный идентификатор ресурса
+  id            String                @id @default(uuid())
+  /// Идентификатоор файла в IVA R
+  ivaId         String
+  /// Название файла
+  name          String
+  /// Дата-время начала видео. Применимо только для ресурсов типа VIDEO
+  startAt       DateTime?             @db.Timestamptz()
+  /// Дата-время конца видео. Применимо только для ресурсов типа VIDEO
+  endAt         DateTime?             @db.Timestamptz()
+  /// Идентификатор описи
+  inventoryId   String
+  /// Объект с информацией об описи
+  inventory     Inventory             @relation(fields: [inventoryId], references: [id])
+  /// Ссылка в ASVI для получения этого ресурса через API (Опционально для разных типов ресусра)
+  url           String?
+  /// Ссылка на видео файл s3-хранилище. (Ссылка изменяется по мере переноса файла из ОП в АХ)
+  s3Url         String?
+  /// Ссылка на файл метаданных в s3-хранилище. (Ссылка изменяется по мере переноса файла из ОП в АХ)
+  s3MetadataUrl String?
+  /// Путь временного хранения сгенерированного файла метаданных
+  metadataPath  String?
+  /// Хэш-сумма видеофайла
+  videoHash     String?
+  /// Хэш-сумма файла метаданных к видео
+  metadataHash  String?
+  /// Статус процесса обработки ресурса в iva-file-transporter
+  status        ResourceProcessStatus @default(NOT_PROCESSED)
+  /// Длительность видео-ресурса
+  duration      Float?
+  /// Список геолокационных данных, которые связаны с этим ресурсом
+  locations     InventoryLocation[]
+  /// Признак того, что файл был перенесен в архивное хранилище
+  isArchived    Boolean               @default(false)
+
+  @@unique([name, inventoryId, ivaId])
+  @@map("inventory_resources")
+}
+
+model Action {
+  /// Идентификатор действия
+  id        String       @id @default(uuid())
+  /// Уникальный идентификатор запроса
+  requestId String?
+  /// Время, когда произошло действие
+  actionAt  DateTime     @default(now()) @db.Timestamptz()
+  /// Тип события
+  type      ActionType
+  /// Статус события
+  status    ActionStatus
+  /// Инициатор действия
+  initiator String
+  /// IP-адрес инициатора
+  ip        String?
+  /// JSON-объект с доп. информацией и данными о действии
+  details   Json?
+
+  @@map("actions")
+}
+
+model DivisionHierarchy {
+  /// Внутренний идентификатор иерархии
+  id                     String                  @id @default(uuid())
+  /// Внешний идентификатор иерархии
+  hierId                 String
+  /// Идентификатор сессии, в рамках которого добавляются ноды к иерархии, если приходит для этой иерархии другой идентификатор сессии, значит нужно очистить узлы и принимать их список заново
+  sessionId              String
+  /// Количестве частей (списков) с узлами иерархии в рамках сессии
+  parts                  Int
+  /// Короткое название иерархии
+  titleSh                String
+  /// Подробное описание иерархии
+  titleMd                String
+  /// Длинный заголовок иерархии
+  titleLn                String
+  /// Список узлов иерархии
+  divisionHierarchyNodes DivisionHierarchyNode[]
+  /// Дата и время создания записи
+  createdAt              DateTime                @default(now())
+  /// Дата и время модификации записи
+  updatedAt              DateTime                @updatedAt
+
+  @@map("division_hierarchies")
+}
+
+model DivisionHierarchyNode {
+  /// Внешний идентификатор узла иерархии
+  id                  String            @id
+  /// Название
+  name                String
+  /// Идентификатор родительского узла (подразделения)
+  parentId            String
+  /// Дата и время начала действия
+  from                DateTime          @db.Timestamptz()
+  /// Дата и время окончания действия
+  to                  DateTime          @db.Timestamptz()
+  /// Уровень, на котором находится иерархия
+  level               Int
+  /// Классификация нода
+  divType             String
+  /// Короткое название иерархии
+  titleSh             String
+  /// Подробное описание иерархии
+  titleMd             String
+  /// Длинный заголовок иерархии
+  titleLn             String
+  /// Код/номер балансовой единицы
+  bukrs               String
+  /// Объект с данными об иерархии
+  divisionHierarchy   DivisionHierarchy @relation(fields: [divisionHierarchyId], references: [id])
+  /// Идентификатор иерархии в которую включен узел
+  divisionHierarchyId String
+
+  @@map("division_hierarchies_nodes")
+}
+
+enum ActionType {
+  /// Пользовательские события
+  /// Создание пользователя в системе
+  USER_CREATE
+  /// Редактирование данных о пользователе. Не включает изменение роли
+  USER_EDIT
+  /// Изменение системной роли пользователя
+  USER_CHANGE_ROLE
+  /// Успешная авторизация на портале
+  USER_LOGIN
+  /// Выход пользователя из учетной записи
+  USER_LOGOUT
+  /// Скачивание файлов инвентаризации пользователем (метаданных или видео-ресурсов)
+  USER_DOWNLOAD_FILE
+  /// Пользователь зашел в конференцию для инструктажа (Кликнул на иконку входа в конференцию на портале)
+  USER_LOGGED_INTO_BRIEFING_CONFERENCE
+  /// Пользователь перешел на страницу входа в конференцию IVA R по описи (кликнул на кнопку входа в конференцию в карточке описи)
+  USER_LOGGED_INTO_AUDIT_CONFERENCE
+  /// Пользователь инициировал процесс восстановления пароля (по клику на кнопку с отправкой нового пароля на e-mail)
+  USER_REQUEST_PASSWORD_RESET
+  /// Пользователь был заблокирован из-за превышения попыток ввода пароля, входа в систему
+  USER_BLOCK_BY_LIMIT_LOGIN_ATTEMPTS
+  /// Администратор сбросил пользователю пароль
+  ADMIN_USER_PASSWORD_RESET
+  /// Блокировка пользователя администратором
+  ADMIN_USER_BLOCK
+  /// Разблокировка пользователя администратором
+  ADMIN_USER_UNBLOCK
+
+  /// Системные события
+  /// Начало переноса обработанных видео-ресурсов и метаданных в Оперативное хранилище
+  SYSTEM_MOVE_RESOURCES_TO_OPERATIVE_STORAGE_START
+  /// Окончание переноса обработанных видео-ресурсов и метаданных в Оперативное хранилище
+  SYSTEM_MOVE_RESOURCES_TO_OPERATIVE_STORAGE_END
+  /// Начало процесса переноса ресурсов из Оперативного хранилища в Архивное
+  SYSTEM_MOVE_RESOURCES_FROM_OPERATIVE_TO_ARCHIVE_STORAGE_START
+  /// Окончание процесса переноса ресурсов из Оперативного хранилища в Архивное
+  SYSTEM_MOVE_RESOURCES_FROM_OPERATIVE_TO_ARCHIVE_STORAGE_END
+
+  /// Внешние события по запросам СБО СОИ. ЭДО. ИНВ. ВИ
+  /// Создание события инвентаризации
+  SOI_EVENT_CREATE
+  /// Создание инвентаризационной описи и конференции IVA R
+  SOI_AUDIT_OPEN
+  /// Закрытие инвентаризационной описи и конференции IVA R
+  SOI_AUDIT_CLOSE
+  /// Открытие конференции для инструктажа в IVA R 
+  SOI_BRIEFING_OPEN
+  /// Закрытие конференции для инструктажа в IVA R
+  SOI_BRIEFING_CLOSE
+  /// Изменение состава участников события инвентаризации по запросу СБО СОИ
+  SOI_EVENT_PARTICIPANTS_CHANGE
+  /// Проверка зарегистрированных в системе пользователей
+  SOI_CHECK_USERS
+}
+
+enum ActionStatus {
+  /// Действие выполнено успешно
+  SUCCESS
+  /// При выполнении действия произошла ошибка
+  ERROR
+}
+
+enum SystemActionType {
+  CREATE_EVENT
+  CREATE_INVENTORY
+}
+
+enum UserStatus {
+  /// Активен
+  ACTIVE
+  /// Заблокирован
+  BLOCKED
+}
+
+enum UserRole {
+  /// Администратор
+  ADMIN
+  /// Пользователь
+  USER
+  /// Оператор-технолог
+  TECHNOLOGY_OPERATOR
+  /// Разработчик
+  DEVELOPER
+  /// Администратор пользователей
+  USER_ADMIN
+}
+
+enum ParticipantRole {
+  /// Председатель
+  CHAIRMAN
+  /// Участник комиссии
+  PARTICIPANT
+  /// Материально-ответственное лицо
+  FINANCIALLY_RESPONSIBLE_PERSON
+  /// Бухгалтер
+  ACCOUNTANT
+  /// Проверяющий
+  INSPECTOR
+  /// Руководитель
+  MANAGER
+  /// Акцепт-бухгалтер
+  ACCOUNTANT_ACCEPTOR
+}
+
+enum InventoryStatus {
+  /// Опись доступна
+  AVAILABLE
+  /// Опись удалена
+  REMOVED
+  /// Комната по описи закрыта
+  CLOSED
+}
+
+enum EventStatus {
+  /// Событие событие инвентаризации активно
+  ACTIVE
+  /// Событие событие инвентаризации помечено удаленным
+  REMOVED
+}
+
+enum BriefingStatus {
+  /// Инструктаж не начат
+  NOT_STARTED
+  /// Инструктаж в процессе
+  IN_PROGRESS
+  /// Инструктаж пройден
+  PASSED
+}
+
+enum ResourceProcessStatus {
+  /// Еще не началась обработка ресурса 
+  NOT_PROCESSED
+  /// Ресусрс в процессе обработки
+  IN_PROCESS
+  /// Ресурс успешно обработан
+  PROCESSED
+}
+
+enum ConferenseRole {
+  /// Докладчик, организатор конференции
+  SPEAKER
+  /// Модератор
+  MODERATOR
+  /// Участник конференции
+  ATTENDEE
+}
+
+model Session {
+  id        String   @id
+  sid       String   @unique
+  data      String
+  expiresAt DateTime
+}
